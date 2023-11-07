@@ -1,0 +1,129 @@
+#make sure that you have installed the pip install wikipedia-api, so Arhur can mine the data!
+import wikipediaapi
+
+#The functio for the data that Arhur will mine
+def wikipedia_data(topic):
+    wiki=wikipedia_data.Wikipedia('en')
+    page=wiki.page(page)
+    if not page.exists():
+        return "Sorry, but I don't know about this topic"
+    return page.summary
+
+#Itroduction of the AI 
+print('I am Arthur. Your Historical AI')
+#Arthur (Archaeology Research Through Historical Unpopular Resources)
+#Users will give their names. It's not important to be their real one
+your_name=input("What's your name?")
+print('It is nice to meet you,', your_name)
+print('Feel comfortable to ask me about historical events') 
+ask = ('However, I can speak with you about certain topics. Please press 0 to see the topics') 
+print('If you do not want to learn about histocal events, but about historical figures, please press 10') 
+#If the user press the 0 button, then the list of the available historical events will appear on his screen 
+if ask == 0:     
+    #the list of the historical events
+    topics=["Ancient Greece", "Ancient Egypt", "Roman Empire", "Byzantium", "Crusades", "Middle Age", "Renaissance", "World War I", "World War II"]
+    print('The topics that we can discuss are:')
+    #we made this for so the list will appear as index starting with the number 1 
+    for index, topic in enumerate(topics, start=1):
+        print(f"{index},{topic}")
+
+   #we use the try - except so the summary wikipedia's data will appear on the user's screen
+    try:
+        #first of all, the user has to choose a number from the list 
+        request=int(input("Enter the number of the topics' list that you want to learn about:"))
+        selected_topic=topics[request-1]
+        #then, using the fuction with the wikpedia data, a summary will appear 
+        data=wikipedia_data(selected_topic)
+        print("\n Here is a summary about what happened:")
+        print(data)
+    #if the user press a number that doesn't exist on the list, then Arthur will return an error message and will request the user to select a number that already exists in the index   
+    except(ValueError, IndexError):
+        print("Invalid choice. Please choose a number that exists in the list")
+        
+    #if the the user wants to learn about another historical event, then they can choose another number from the index 
+    print('Is there anything else you want to learn,', your_name, '?') 
+    request = input('Feel free to ask: ')
+
+#if the user press another number than 0, the list with the historical topics won't appear, so the Author will return an error message and will request the user to press 0
+#except if the user press 10, then that means that he doesn't want to learn about historical events, but about historical figures
+#We will see what is happening if he makes that choice later 
+else: 
+    print('Please press 0 or 10 to show you the list of the topics')
+
+
+#if the user doesn't want to discuss about historical events but historical features, then he has to press 10
+if ask == '10': 
+    print('Do you wanna discuss about:')
+    #the user here can choose between three historical topics about three different historical occupations 
+    topics10=["Kings & Leaders", "Classic Authors", "Classic Painters"]
+    #like the historical events, the list with the three topics will become an index which starts with the number 1
+    for index, topic in enumerate(topics10, start=1):
+        print(f"{index}, {topic}")
+        request10=int(input("Enter the number of the topics' list that you want to learn about:"))
+        selected_topic10=topics[request10-1]
+
+        #there are three different categories, so three different if, dependable the user's choice 
+        #anyone could see that the code is similar with this for the historical events 
+        
+        if request10=='1': 
+            print("So, you want to learn about historical leaders")
+            leaders=["Minos", "Alexander the Great", "Julius Ceasar", "Constantine the Great", "Baldwin IV", "Saladin", "Richard Leonheart", "Queen Elizabeth I", "Adolf Hitler", "Queen Elizabeth II"]
+            print('The Kings & Leaders that we can discuss about are:')
+            for index, topic in enumerate(leaders, start=1):
+                print(f"{index}, {topic}")
+
+        #the only things that are different, as anyone could see are the variable names
+        
+        try:
+            request101=int(input("Enter the number of the leaders' list that you want to learn about:"))
+            selected_topic=leaders[request101-1]
+            data=wikipedia_data(selected_topic)
+            print("\n Here is a summary about who was this historical figure:")
+            print(data)
+        except(ValueError, IndexError):
+            print("Invalid choice. Please choose a number that exists in the list")
+        
+        print('Is there another leader you want to learn about,', your_name, '?') 
+        request101 = input('Feel free to ask: ')
+
+        if request10=='2':
+            print("So, you want to learn about classic authors")
+            authors=["Ryunosuke Akutagawa", "Dazai Osamu", "Fyodor Dostoyevsky", "Leo Tolstoy", "Nikolai Gogol", "Victor Hugo", "Umberto Eco", "Edgar Allan Poe", "Francis Scott Key Fitzgerald", "Mark Twain"]
+            print('The authors that we can discuss about are:')
+            for index, topic in enumerate(authors, start=1):
+                print(f"{index},{topic}")
+
+        try: 
+            request102=int(input("Enter the number of the authors' list that you want to learn about:"))
+            selected_topic=authors[request102-1]
+            data=wikipedia_data(selected_topic)
+            print("\n Here is a summary about who was this classic author:")
+            print(data)
+        except(ValueError, IndexError):
+            print("Invalid choice. Please choose a number that exists in the list")
+
+        print('Is there another author you want to learn about', your_name, '?')
+        request102 = input('Feel free to ask: ')
+
+        if request10=='3':
+            print("So, you want to learn about classic painters")
+            painters=["Leonardo Da Vinci", "Michelangelo", "Vermeer", "Vincent Van Gogh", "Edvard Munch", "Jean-Antoine Watteau", "Eugene Delacroix", "El Greco"]
+            print('The authors that we can discuss about are:')
+            for index, topic in enumerate(painters, start=1):
+                print(f"{index},{topic}")
+
+        try: 
+            request103=int(input("Enter the number of the painters' list that you want to learn about:"))
+            selected_topic=authors[request103-1]
+            data=wikipedia_data(selected_topic)
+            print("\n Here is a summary about who was this classic painter:")
+            print(data)
+        except(ValueError, IndexError):
+            print("Invalid choice. Please choose a number that exists in the list")
+
+        print('Is there another author you want to learn about', your_name, '?')
+        request103 = input('Feel free to ask: ')
+
+   #if the user press another number than 0 or, the list with the historical topics or figures won't appear, so the Arthur will return an error message and will request the user to press 0 or 10
+    else:
+        print('Please press 0 or 10 to show you the list of the topics.')   
