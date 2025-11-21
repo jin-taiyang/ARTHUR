@@ -1,129 +1,238 @@
-#make sure that you have installed the pip install wikipedia-api, so Arhur can mine the data!
+"""
+Arthur - Mini AI (Embeddings + Retrieval + OpenAI Responses)
+- Requires: set env var OPENAI_API_KEY
+- Install: pip install -r requirements.txt
+"""
+
+import os
+import json
+import math
+from typing import List, Dict, Any
+from tqdm import tqdm
+
 import wikipediaapi
+import numpy as np
+from dotenv import load_dotenv
 
-#The functio for the data that Arhur will mine
-def wikipedia_data(topic):
-    wiki=wikipedia_data.Wikipedia('en')
-    page=wiki.page(page)
+# OpenAI official modern client
+# Install via pip install openai
+from openai import OpenAI
+
+load_dotenv()  # loads .env if exists
+
+# -------------------------
+# Configuration
+# -------------------------
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("Set OPENAI_API_KEY in environment (or in a .env file).")
+
+# Initialize OpenAI client (reads API key from env automatically, but set here for clarity)
+client = OpenAI()
+
+# Model choices -- you can change per your access
+EMBEDDING_MODEL = "text-embedding-3-large"   # embeddings model
+# For generation you can choose a Responses-capable model you have access to, e.g. "gpt-5" or "gpt-4o"
+GENERATION_MODEL = "gpt-4o"  # change if you prefer "gpt-5" or other
+
+STORE_FILE = "arthur_store.json"  # local DB of {page, chunks, embeddings}
+CHUNK_CHARS = 1000   # size for chunking wikipedia text (adjust)
+
+# -------------------------
+# Utilities
+# -------------------------
+def chunk_text(text: str, max_chars: int = CHUNK_CHARS) -> List[str]:
+    """Simple chunker: splits by paragraphs then builds chunks up to max_chars."""
+    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+    chunks = []
+    cur = ""
+    for p in paragraphs:
+        if len(cur) + len(p) + 1 <= max_chars:
+            cur += ("\n" if cur else "") + p
+        else:
+            if cur:
+                chunks.append(cur)
+            # if single paragraph longer than max, break it
+            if len(p) > max_chars:
+                for i in range(0, len(p), max_chars):
+                    chunks.append(p[i:i+max_chars])
+                cur = ""
+            else:
+                cur = p
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+        return 0.0
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+# -------------------------
+# Wikipedia ingestion
+# -------------------------
+def fetch_wikipedia_page(title: str) -> str:
+    wiki = wikipediaapi.Wikipedia("en")
+    page = wiki.page(title)
     if not page.exists():
-        return "Sorry, but I don't know about this topic"
-    return page.summary
+        raise ValueError(f"Wikipedia page not found: {title}")
+    return page.text
 
-#Itroduction of the AI 
-print('I am Arthur. Your Historical AI')
-#Arthur (Archaeology Research Through Historical Unpopular Resources)
-#Users will give their names. It's not important to be their real one
-your_name=input("What's your name?")
-print('It is nice to meet you,', your_name)
-print('Feel comfortable to ask me about historical events') 
-ask = ('However, I can speak with you about certain topics. Please press 0 to see the topics') 
-print('If you do not want to learn about histocal events, but about historical figures, please press 10') 
-#If the user press the 0 button, then the list of the available historical events will appear on his screen 
-if ask == 0:     
-    #the list of the historical events
-    topics=["Ancient Greece", "Ancient Egypt", "Roman Empire", "Byzantium", "Crusades", "Middle Age", "Renaissance", "World War I", "World War II"]
-    print('The topics that we can discuss are:')
-    #we made this for so the list will appear as index starting with the number 1 
-    for index, topic in enumerate(topics, start=1):
-        print(f"{index},{topic}")
+def embed_texts(texts: List[str]) -> List[List[float]]:
+    """Call OpenAI embeddings API for a list of texts. Returns list of vectors."""
+    # The modern client: client.embeddings.create(...)
+    resp = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=texts
+    )
+    # response.data is a list of embeddings objects
+    return [item.embedding for item in resp.data]
 
-   #we use the try - except so the summary wikipedia's data will appear on the user's screen
-    try:
-        #first of all, the user has to choose a number from the list 
-        request=int(input("Enter the number of the topics' list that you want to learn about:"))
-        selected_topic=topics[request-1]
-        #then, using the fuction with the wikpedia data, a summary will appear 
-        data=wikipedia_data(selected_topic)
-        print("\n Here is a summary about what happened:")
-        print(data)
-    #if the user press a number that doesn't exist on the list, then Arthur will return an error message and will request the user to select a number that already exists in the index   
-    except(ValueError, IndexError):
-        print("Invalid choice. Please choose a number that exists in the list")
-        
-    #if the the user wants to learn about another historical event, then they can choose another number from the index 
-    print('Is there anything else you want to learn,', your_name, '?') 
-    request = input('Feel free to ask: ')
+def add_page_to_store(title: str):
+    """Fetch page, chunk it, embed chunks, and save to local store (STORE_FILE)."""
+    print(f"[+] Fetching Wikipedia page: {title}")
+    text = fetch_wikipedia_page(title)
+    chunks = chunk_text(text)
+    if not chunks:
+        print("[!] No text chunks found.")
+        return
 
-#if the user press another number than 0, the list with the historical topics won't appear, so the Author will return an error message and will request the user to press 0
-#except if the user press 10, then that means that he doesn't want to learn about historical events, but about historical figures
-#We will see what is happening if he makes that choice later 
-else: 
-    print('Please press 0 or 10 to show you the list of the topics')
+    print(f"[+] Creating embeddings for {len(chunks)} chunks...")
+    embeddings = embed_texts(chunks)
 
-
-#if the user doesn't want to discuss about historical events but historical features, then he has to press 10
-if ask == '10': 
-    print('Do you wanna discuss about:')
-    #the user here can choose between three historical topics about three different historical occupations 
-    topics10=["Kings & Leaders", "Classic Authors", "Classic Painters"]
-    #like the historical events, the list with the three topics will become an index which starts with the number 1
-    for index, topic in enumerate(topics10, start=1):
-        print(f"{index}, {topic}")
-        request10=int(input("Enter the number of the topics' list that you want to learn about:"))
-        selected_topic10=topics[request10-1]
-
-        #there are three different categories, so three different if, dependable the user's choice 
-        #anyone could see that the code is similar with this for the historical events 
-        
-        if request10=='1': 
-            print("So, you want to learn about historical leaders")
-            leaders=["Minos", "Alexander the Great", "Julius Ceasar", "Constantine the Great", "Baldwin IV", "Saladin", "Richard Leonheart", "Queen Elizabeth I", "Adolf Hitler", "Queen Elizabeth II"]
-            print('The Kings & Leaders that we can discuss about are:')
-            for index, topic in enumerate(leaders, start=1):
-                print(f"{index}, {topic}")
-
-        #the only things that are different, as anyone could see are the variable names
-        
-        try:
-            request101=int(input("Enter the number of the leaders' list that you want to learn about:"))
-            selected_topic=leaders[request101-1]
-            data=wikipedia_data(selected_topic)
-            print("\n Here is a summary about who was this historical figure:")
-            print(data)
-        except(ValueError, IndexError):
-            print("Invalid choice. Please choose a number that exists in the list")
-        
-        print('Is there another leader you want to learn about,', your_name, '?') 
-        request101 = input('Feel free to ask: ')
-
-        if request10=='2':
-            print("So, you want to learn about classic authors")
-            authors=["Ryunosuke Akutagawa", "Dazai Osamu", "Fyodor Dostoyevsky", "Leo Tolstoy", "Nikolai Gogol", "Victor Hugo", "Umberto Eco", "Edgar Allan Poe", "Francis Scott Key Fitzgerald", "Mark Twain"]
-            print('The authors that we can discuss about are:')
-            for index, topic in enumerate(authors, start=1):
-                print(f"{index},{topic}")
-
-        try: 
-            request102=int(input("Enter the number of the authors' list that you want to learn about:"))
-            selected_topic=authors[request102-1]
-            data=wikipedia_data(selected_topic)
-            print("\n Here is a summary about who was this classic author:")
-            print(data)
-        except(ValueError, IndexError):
-            print("Invalid choice. Please choose a number that exists in the list")
-
-        print('Is there another author you want to learn about', your_name, '?')
-        request102 = input('Feel free to ask: ')
-
-        if request10=='3':
-            print("So, you want to learn about classic painters")
-            painters=["Leonardo Da Vinci", "Michelangelo", "Vermeer", "Vincent Van Gogh", "Edvard Munch", "Jean-Antoine Watteau", "Eugene Delacroix", "El Greco"]
-            print('The authors that we can discuss about are:')
-            for index, topic in enumerate(painters, start=1):
-                print(f"{index},{topic}")
-
-        try: 
-            request103=int(input("Enter the number of the painters' list that you want to learn about:"))
-            selected_topic=authors[request103-1]
-            data=wikipedia_data(selected_topic)
-            print("\n Here is a summary about who was this classic painter:")
-            print(data)
-        except(ValueError, IndexError):
-            print("Invalid choice. Please choose a number that exists in the list")
-
-        print('Is there another author you want to learn about', your_name, '?')
-        request103 = input('Feel free to ask: ')
-
-   #if the user press another number than 0 or, the list with the historical topics or figures won't appear, so the Arthur will return an error message and will request the user to press 0 or 10
+    # Load or init store
+    if os.path.exists(STORE_FILE):
+        with open(STORE_FILE, "r", encoding="utf-8") as f:
+            store = json.load(f)
     else:
-        print('Please press 0 or 10 to show you the list of the topics.')   
+        store = {"items": []}
+
+    for chunk, emb in zip(chunks, embeddings):
+        store["items"].append({
+            "source": title,
+            "text": chunk,
+            "embedding": emb
+        })
+
+    with open(STORE_FILE, "w", encoding="utf-8") as f:
+        json.dump(store, f, ensure_ascii=False, indent=2)
+    print(f"[+] Saved {len(chunks)} chunks to {STORE_FILE}.")
+
+# -------------------------
+# Simple retrieval
+# -------------------------
+def load_store() -> Dict[str, Any]:
+    if not os.path.exists(STORE_FILE):
+        return {"items": []}
+    with open(STORE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def retrieve_relevant_chunks(query: str, top_k: int = 4):
+    store = load_store()
+    texts = [item["text"] for item in store["items"]]
+    embs = [np.array(item["embedding"], dtype=float) for item in store["items"]]
+    if not embs:
+        return []
+
+    q_emb = np.array(client.embeddings.create(model=EMBEDDING_MODEL, input=[query]).data[0].embedding, dtype=float)
+
+    # compute similarities
+    sims = [cosine_similarity(q_emb, e) for e in embs]
+    ranked_idx = sorted(range(len(sims)), key=lambda i: sims[i], reverse=True)[:top_k]
+    return [ {"text": store["items"][i]["text"], "source": store["items"][i]["source"], "score": sims[i]} for i in ranked_idx]
+
+# -------------------------
+# Ask the model (Responses API)
+# -------------------------
+def ask_arthur(query: str, top_k: int = 4) -> str:
+    # retrieve context
+    hits = retrieve_relevant_chunks(query, top_k=top_k)
+    context_parts = []
+    for i, h in enumerate(hits, start=1):
+        context_parts.append(f"[{i}] Source: {h['source']}\n{h['text'][:1500]}")  # trim for safety
+
+    context_text = "\n\n---\n\n".join(context_parts) if context_parts else "No context found."
+
+    system_instruction = (
+        "You are Arthur, a helpful historical assistant. Use the provided context (if relevant) "
+        "to answer precisely. If the context does not contain an answer, answer using general historical knowledge, "
+        "and be explicit about uncertainty. Keep answers concise and cite the context chunk numbers if used."
+    )
+
+    user_prompt = f"Context:\n{context_text}\n\nUser question: {query}\n\nAnswer:"
+    # Call Responses API
+    response = client.responses.create(
+        model=GENERATION_MODEL,
+        input=[
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_prompt}
+        ],
+        # you may set max_output_tokens etc.
+    )
+
+    # The Responses API returns items in response.output
+    # Use helper properties if present; we fallback to joining text items
+    # Newer SDKs may provide response.output_text
+    try:
+        # Preferred: response.output_text
+        out_text = getattr(response, "output_text", None)
+        if out_text:
+            return out_text.strip()
+    except Exception:
+        pass
+
+    # Fallback parsing:
+    output_items = response.output if hasattr(response, "output") else response.get("output", [])
+    parts = []
+    for it in output_items:
+        if isinstance(it, dict) and "content" in it:
+            # structured item
+            c = it["content"]
+            if isinstance(c, list):
+                for sub in c:
+                    if isinstance(sub, dict) and "text" in sub:
+                        parts.append(sub["text"])
+                    elif isinstance(sub, str):
+                        parts.append(sub)
+            elif isinstance(c, str):
+                parts.append(c)
+        elif isinstance(it, dict) and "text" in it:
+            parts.append(it["text"])
+        elif isinstance(it, str):
+            parts.append(it)
+    return "\n".join(parts).strip() or "(no text in response)"
+
+# -------------------------
+# CLI / Example usage
+# -------------------------
+def interactive_loop():
+    print("Arthur - mini AI (embeddings + retrieval + OpenAI Responses)")
+    print("Commands:")
+    print("  ingest <Wikipedia page title>   - fetch & store page chunks")
+    print("  ask <your question>             - ask Arthur (uses stored pages)")
+    print("  exit                            - quit")
+
+    while True:
+        raw = input("\n> ").strip()
+        if not raw:
+            continue
+        if raw.lower() in ("exit", "quit"):
+            break
+        if raw.startswith("ingest "):
+            title = raw[len("ingest "):].strip()
+            try:
+                add_page_to_store(title)
+            except Exception as e:
+                print("Error ingesting:", e)
+        elif raw.startswith("ask "):
+            q = raw[len("ask "):].strip()
+            try:
+                ans = ask_arthur(q, top_k=4)
+                print("\nArthur:", ans)
+            except Exception as e:
+                print("Error asking Arthur:", e)
+        else:
+            print("Unknown command. Use 'ingest <title>' or 'ask <question>'.")
+
+if __name__ == "__main__":
+    interactive_loop()
